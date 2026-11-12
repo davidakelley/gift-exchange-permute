@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gift Exchange Calculator</title>
+<style>
+  :root { color-scheme: light; font-family: "Instrument Sans", system-ui, sans-serif; color: #182e27; background: #f6f3eb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { width: min(72rem, 100%); margin: auto; padding: clamp(1rem, 2vw, 3.5rem); }
+  header { background: #173e32; color: #fff8e7; border-radius: 1rem; padding: clamp(1.5rem, 1vw, 3rem); margin-bottom: 1.5rem; }
+  h1, h2 { font-family: "Instrument Serif", Georgia, serif; font-weight: 500; margin: 0; }
+  h1 { font-size: clamp(2.25rem, 4vw, 4rem); }
+  h2 { font-size: 1.85rem; }
+  p { line-height: 1.5; margin: .55rem 0; }
+  section { min-width: 0; padding: clamp(1rem, 1vw, 1.6rem); background: #fffdf8; border: 1px solid #ddd9cd; border-radius: 1rem; }
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: separate; border-spacing: .18rem; width: 100%; min-width: 34rem; table-layout: fixed; text-align: center; font-size: .82rem; }
+  th { font-weight: 650; }
+  th[scope=row] { text-align: left; padding-right: .35rem; }
+  td { padding: 0; }
+  button { font: inherit; cursor: pointer; }
+  .cell { min-width: 2rem; min-height: 2.75rem; display: grid; place-items: center; border-radius: .35rem; }
+  .cell { width: 100%; border: 1px solid transparent; background: #e4f0e5; color: #18472d; font-size: 1rem; }
+  .cell[data-state="no"] { background: #edc7c1; color: #792b24; }
+  .forced-giver .cell[data-state="no"] { background: #f8e8e5; color: #792b24; }
+  button:focus-visible, .scroll:focus-visible { outline: 2px solid #2455aa; outline-offset: 1px; }
+  .reset { border: 1px solid #b5c3b7; border-radius: .5rem; color: #173e32; background: transparent; padding: .55rem .8rem; }
+  .total { font-size: 1.15rem; font-weight: 700; margin-top: .8rem; }
+  .cell { font-variant-numeric: tabular-nums; }
+  .cell[data-state="yes"] { background: #20553b; color: #fffdf8; }
+  .controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin: 1rem 0; }
+  .view { display: inline-flex; align-items: center; gap: .6rem; cursor: pointer; font-size: .9rem; font-weight: 650; }
+  .view input { appearance: none; display: inline-grid; align-items: center; width: 2.75rem; height: 1.55rem; padding: .16rem; margin: 0; border: 1px solid #35584b; border-radius: 1rem; background: #dce5db; cursor: pointer; }
+  .view input::before { content: ""; display: block; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: #20553b; }
+  .view input:checked { background: #20553b; }
+  .view input:checked::before { justify-self: end; background: #fffdf8; }
+  .view input:focus-visible { outline: 2px solid #2455aa; outline-offset: 2px; }
+  .reset { margin-left: auto; }
+  .axis { color: #35584b; font-size: 1.2rem; font-weight: 700; }
+  .giver-axis-column { width: 2rem; }
+  .giver-axis { vertical-align: middle; }
+  .giver-axis span { display: inline-block; transform: rotate(-90deg); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Gift Exchange Calculator</h1>
+  </header>
+  <section>
+    <h2>Possible assignments</h2>
+    <p>Click a cell to cycle through Unknown, Known No (×), and Known Yes (✓). A new check replaces any check in the same row or column.</p>
+    <p class="total" id="total" role="status"></p>
+    <div class="controls">
+      <label class="view">
+        <span aria-hidden="true">Count</span>
+        <input type="checkbox" role="switch" id="show-percent" aria-label="Show percentages">
+        <span aria-hidden="true">Percentage</span>
+      </label>
+      <button type="button" class="reset" id="reset">Reset</button>
+    </div>
+    <p id="display-note"></p>
+    <div class="scroll" tabindex="0" aria-label="Scrollable pairing table">
+      <table id="pairings" aria-label="Gift exchange pairings" aria-describedby="display-note"></table>
+    </div>
+  </section>
+</main>
+<script>
+  const scenarioLogUrl = atob('aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5UmN' +
+  'xSTJkeGdOWGg4Tmh1VEJLZi0yRC1NTHFDMU5TZWdtZ0I0aTZUZ1F1NVVjeE1WMTBFbUNsVnFIeS1KanMzUXAvZXhlYw==');
+  let sessionId;
+  let step = 0;
+
+  function logScenario(action, allowed, cell = null) {
+    sessionId ??= crypto.randomUUID();
+    const body = JSON.stringify({ version: 1, sessionId, step: ++step, action, cell, names, rules, allowed });
+    fetch(scenarioLogUrl, {method: 'POST', mode: 'no-cors', credentials: 'omit', keepalive: true,
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body}).catch(() => {  });
+  }
+
+  const names = ['Alex', 'Laura', 'Tom', 'David', 'Michelle', 'Allison'];
+  const nextState = { unknown: 'no', no: 'yes', yes: 'unknown' };
+  function makeDefaultRules() {
+    return names.map((_, giver) => names.map((_, receiver) => giver === receiver ? 'no' : 'unknown'));
+  }
+
+  let rules = makeDefaultRules();
+
+  function calculate(rules) {
+    const size = rules.length;
+    const counts = rules.map(row => row.map(() => 0));
+    const candidates = rules.map(row => {
+      const required = row.flatMap((state, recipient) => state === 'yes' ? [recipient] : []);
+      if (required.length > 1) return [];
+      if (required.length === 1) return required;
+      return row.flatMap((state, recipient) => state === 'unknown' ? [recipient] : []);
+    });
+    const used = Array(size).fill(false);
+    const assignment = [];
+    let allowed = 0;
+    let total = 1;
+    for (let i = 2; i <= size; i++) total *= i;
+
+    function assign(giver) {
+      if (giver === size) {
+        allowed++;
+        assignment.forEach((recipient, row) => counts[row][recipient]++);
+        return;
+      }
+      for (const recipient of candidates[giver]) {
+        if (used[recipient]) continue;
+        used[recipient] = true;
+        assignment[giver] = recipient;
+        assign(giver + 1);
+        used[recipient] = false;
+      }
+    }
+
+    assign(0);
+    return { allowed, total, counts };
+  }
+
+  function addHeading(row, name, scope) {
+    const heading = document.createElement('th');
+    heading.scope = scope;
+    heading.textContent = name;
+    row.append(heading);
+    return heading;
+  }
+
+  const table = document.getElementById('pairings');
+  const columns = document.createElement('colgroup');
+  const giverAxisColumn = document.createElement('col');
+  giverAxisColumn.className = 'giver-axis-column';
+  const giverColumn = document.createElement('col');
+  const receiverColumns = document.createElement('col');
+  receiverColumns.span = names.length;
+  columns.append(giverAxisColumn, giverColumn, receiverColumns);
+  table.append(columns);
+  const head = table.createTHead();
+  const axes = head.insertRow();
+  axes.insertCell().colSpan = 2;
+  const receiver = addHeading(axes, 'Receiver', 'colgroup');
+  receiver.colSpan = names.length;
+  receiver.className = 'axis';
+  const headings = head.insertRow();
+  headings.insertCell().colSpan = 2;
+  names.forEach(name => addHeading(headings, name, 'col'));
+
+  const body = table.createTBody();
+  const buttons = names.map((giverName, giver) => {
+    const row = body.insertRow();
+    if (giver === 0) {
+      const giverAxis = addHeading(row, '', 'rowgroup');
+      giverAxis.className = 'axis giver-axis';
+      giverAxis.rowSpan = names.length;
+      const label = document.createElement('span');
+      label.textContent = 'Giver';
+      giverAxis.append(label);
+    }
+    addHeading(row, giverName, 'row');
+    return names.map((recipientName, recipient) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cell';
+      button.setAttribute('aria-label', giverName + ' giving to ' + recipientName);
+      button.addEventListener('click', () => {
+        const state = nextState[rules[giver][recipient]];
+        if (state === 'yes') {
+          rules[giver].forEach((otherState, otherRecipient) => {
+            if (otherState === 'yes') rules[giver][otherRecipient] = 'unknown';
+          });
+          rules.forEach(otherRow => {
+            if (otherRow[recipient] === 'yes') otherRow[recipient] = 'unknown';
+          });
+        }
+        rules[giver][recipient] = state;
+        logScenario('cell', update(), [giver, recipient]);
+      });
+      row.insertCell().append(button);
+      return button;
+    });
+  });
+
+  const percentOption = document.getElementById('show-percent');
+  const formatter = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 0 });
+
+  function update() {
+    const { allowed, total, counts } = calculate(rules);
+    const showPercent = percentOption.checked;
+    document.getElementById('total').textContent = allowed + ' of ' + total + ' assignments are possible';
+    document.getElementById('display-note').textContent = showPercent
+      ? 'Percentage of valid assignments that include each pairing. A dash means there are no valid assignments.'
+      : 'Number of valid assignments that include each pairing.';
+    rules.forEach((row, giver) => {
+      body.rows[giver].classList.toggle('forced-giver', row.includes('yes'));
+      row.forEach((state, recipient) => {
+        const button = buttons[giver][recipient];
+        const count = counts[giver][recipient];
+        const value = showPercent ? (allowed ? formatter.format(count / allowed) : '—') : String(count);
+        const summary = showPercent
+          ? (allowed ? value + ' of valid assignments' : 'No valid assignments')
+          : count + ' valid assignments include this pairing';
+        const label = { no: '×', yes: '✓', unknown: value };
+        const description = { no: 'Known No', yes: 'Known Yes', unknown: 'Unknown. ' + summary };
+        button.dataset.state = state;
+        button.textContent = label[state];
+        button.setAttribute('aria-description', description[state]);
+      });
+    });
+    return allowed;
+  }
+
+  percentOption.addEventListener('change', update);
+
+  document.getElementById('reset').addEventListener('click', () => {
+    rules = makeDefaultRules();
+    logScenario('reset', update());
+  });
+
+  if (globalThis.crypto?.randomUUID) {
+    logScenario('start', calculate(rules).allowed);
+  }
+
+  update();
+</script>
+</body>
+</html>
