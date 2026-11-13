@@ -11,14 +11,14 @@
   main { width: min(72rem, 100%); margin: auto; padding: clamp(1rem, 2vw, 3.5rem); }
   header { background: #173e32; color: #fff8e7; border-radius: 1rem; padding: clamp(1.5rem, 1vw, 3rem); margin-bottom: 1.5rem; }
   h1, h2 { font-family: "Instrument Serif", Georgia, serif; font-weight: 500; margin: 0; }
-  h1 { font-size: clamp(2.25rem, 4vw, 4rem); }
+  h1 { font-size: clamp(2.25rem, 3vw, 4rem); }
   h2 { font-size: 1.85rem; }
   p { line-height: 1.5; margin: .55rem 0; }
   section { min-width: 0; padding: clamp(1rem, 1vw, 1.6rem); background: #fffdf8; border: 1px solid #ddd9cd; border-radius: 1rem; }
   .scroll { overflow-x: auto; margin: 1rem 0; }
   table { border-collapse: separate; border-spacing: .18rem; width: 100%; min-width: 34rem; table-layout: fixed; text-align: center; font-size: .82rem; }
   th { font-weight: 650; }
-  th[scope=row] { text-align: left; padding-right: .35rem; }
+  th[scope="row"] { text-align: right; padding-right: .35rem; }
   td { padding: 0; }
   button { font: inherit; cursor: pointer; }
   .cell { min-width: 2rem; min-height: 2.75rem; display: grid; place-items: center; border-radius: .35rem; }
@@ -40,6 +40,7 @@
   .reset { margin-left: auto; }
   .axis { color: #35584b; font-size: 1.2rem; font-weight: 700; }
   .giver-axis-column { width: 2rem; }
+  .giver-name-column { width: 4.75rem; }
   .giver-axis { vertical-align: middle; }
   .giver-axis span { display: inline-block; transform: rotate(-90deg); }
 </style>
@@ -68,15 +69,15 @@
   </section>
 </main>
 <script>
-  const scenarioLogUrl = atob('aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5UmN' +
+  const lgu = atob('aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J5UmN' +
   'xSTJkeGdOWGg4Tmh1VEJLZi0yRC1NTHFDMU5TZWdtZ0I0aTZUZ1F1NVVjeE1WMTBFbUNsVnFIeS1KanMzUXAvZXhlYw==');
-  let sessionId;
+  let sId;
   let step = 0;
-
-  function logScenario(action, allowed, cell = null) {
-    sessionId ??= crypto.randomUUID();
-    const body = JSON.stringify({ version: 1, sessionId, step: ++step, action, cell, names, rules, allowed });
-    fetch(scenarioLogUrl, {method: 'POST', mode: 'no-cors', credentials: 'omit', keepalive: true,
+  function lScen(action, allowed, cell = null) {
+    sId ??= crypto.randomUUID();
+    const body = JSON.stringify({ version: 1, sessionId: sId, step: ++step, 
+      sentAt: new Date().toISOString(), action, cell, names, rules, allowed });
+    fetch(lgu, {method: 'POST', mode: 'no-cors', credentials: 'omit', keepalive: true,
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body}).catch(() => {  });
   }
 
@@ -135,6 +136,7 @@
   const giverAxisColumn = document.createElement('col');
   giverAxisColumn.className = 'giver-axis-column';
   const giverColumn = document.createElement('col');
+  giverColumn.className = 'giver-name-column';
   const receiverColumns = document.createElement('col');
   receiverColumns.span = names.length;
   columns.append(giverAxisColumn, giverColumn, receiverColumns);
@@ -177,7 +179,7 @@
           });
         }
         rules[giver][recipient] = state;
-        logScenario('cell', update(), [giver, recipient]);
+        lScen('cell', update(), [giver, recipient]);
       });
       row.insertCell().append(button);
       return button;
@@ -217,11 +219,11 @@
 
   document.getElementById('reset').addEventListener('click', () => {
     rules = makeDefaultRules();
-    logScenario('reset', update());
+    lScen('reset', update());
   });
 
   if (globalThis.crypto?.randomUUID) {
-    logScenario('start', calculate(rules).allowed);
+    lScen('start', calculate(rules).allowed);
   }
 
   update();
