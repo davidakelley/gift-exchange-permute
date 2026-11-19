@@ -84,7 +84,14 @@
   const names = ['Alex', 'Laura', 'Tom', 'David', 'Michelle', 'Allison'];
   const nextState = { unknown: 'no', no: 'yes', yes: 'unknown' };
   function makeDefaultRules() {
-    return names.map((_, giver) => names.map((_, receiver) => giver === receiver ? 'no' : 'unknown'));
+    return [
+      ['no', 'no', 'unknown', 'no', 'unknown', 'unknown'],
+      ['no', 'no', 'unknown', 'unknown', 'unknown', 'no'],
+      ['no', 'unknown', 'no', 'unknown', 'unknown', 'unknown'],
+      ['unknown', 'unknown', 'no', 'no', 'unknown', 'no'],
+      ['unknown', 'no', 'unknown', 'unknown', 'no', 'unknown'],
+      ['unknown', 'unknown', 'unknown', 'no', 'no', 'no'],
+    ];
   }
 
   let rules = makeDefaultRules();
